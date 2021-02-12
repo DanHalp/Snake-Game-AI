@@ -93,7 +93,7 @@ class A_STAR(GameMode):
                 # A* algorithm logic:
                 dis = 0.3                                   # the value of the step to the next tile on the screen.
                 t = g + dis + self.heu(sk, food) * 2
-                i = bisect_right(scores, t)  # Fine the index to push the new node to.
+                i = bisect_right(scores, t)  # Find the index to push the new node to.
 
                 head_s = str(sk.body[-1])
                 ins_to_stack = True          # Is this the best path to the current node?
