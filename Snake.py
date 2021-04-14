@@ -1,4 +1,3 @@
-from copy import deepcopy
 from ColoursAndData import *
 
 
@@ -16,21 +15,25 @@ class Snake:
         self.heuristic_value = 0
         self.depth = 0
 
+    def available_steps(self):
+        return (self.curr_dir + np.array(DIRECTIONS)) % 4
+
     def create_snake(self):
-        x = int(np.ceil(np.random.randint(GAME_WIDTH * 0.25, GAME_WIDTH * 0.75) / 10) * 10)
-        y = int(np.ceil(np.random.randint(GAME_HEIGHT * 0.25, GAME_HEIGHT * 0.75) / 10) * 10)
-        self.add_cell(x, y)
-        self.body_set[(x, y)] += 1
+        x = int(np.ceil(np.random.randint(GAME_WIDTH * 0.25, GAME_WIDTH * 0.75)))
+        y = int(np.ceil(np.random.randint(GAME_HEIGHT * 0.25, GAME_HEIGHT * 0.75)))
+        self.add_cell((x, y))
 
     def add_tail(self, tail):
         self.body.appendleft(tail)
 
-    def add_cell(self, x, y):
-        self.body.append((x, y))
+    def add_cell(self, cell):
+        assert self.body_set[cell] <= 1
+        self.body.append(cell)
+        self.body_set[cell] += 1
 
     def draw_body(self, display):
         for i, cell in enumerate(self.body):
-            x, y = cell
+            x, y = np.array(cell) * SIZE_FACTOR
             if i + 4 >= len(self.body) - 1:
                 j = len(self.body) - i
                 pygame.draw.circle(display, np.maximum(YELLOW - (20 * j), np.zeros(3)), [x, y], SNAKE_RADIUS)
@@ -47,9 +50,8 @@ class Snake:
         self.body_set[self.body[-1]] += 1
         self.body_set[end_t] = 0
 
-    def has_eaten(self, food):
-
-        hx, hy = self.body[-1]
+    def has_eaten(self, food, new_head):
+        hx, hy = new_head
         fx, fy = food
         return hx == fx and hy == fy
 
@@ -66,19 +68,38 @@ class Snake:
         xc, yc = change_values
         hx, hy = self.body[-1]
         new_head = (xc + hx, hy + yc)
+
         to_remove = self.body[0]
+
         self.body_set[to_remove] = 0
         self.body_set[new_head] += 1
         self.body.rotate(-1)
         self.body[-1] = new_head
 
-    def fails(self):
-        x, y = self.body[-1]
-        res1 = x <= 0 or x >= GAME_WIDTH or y <= 0 or y >= GAME_HEIGHT
-        res2 = self.body_set[self.body[-1]] > 1
-        return res1 or res2
+    def hits_wall(self, x, y):
+        return x <= 0 or x >= GAME_WIDTH or y <= 0 or y >= GAME_HEIGHT
+
+    def bites_itself(self, new_head):
+        return self.body_set[tuple(new_head)] > 1
+
+    def fails(self, new_head):
+        return self.hits_wall(*new_head) or self.bites_itself(new_head)
 
     def euclidean_dis(self, elememt):
         head = np.array(self.body[-1])
         food = np.array(elememt)
         return np.linalg.norm(head - food) / 10
+
+    def dis_from_threat(self, direction, food):
+
+        dummy = self.copy()
+        c_dir = DIRECTION_TO_TUPLE[direction]
+        new_head = np.array(dummy.body[-1]) + c_dir
+        return 0 if self.fails(new_head) else 1
+
+    def find_directions(self):
+        # directions = snake.available_steps()
+        # coor = np.array([np.array(snake.body[-1]) + np.array(DIRECTION_TO_TUPLE[i]) for i in directions])
+        # distances = self.dis_to_food(coor, food)
+        # return [x for _, x in sorted(zip(distances, directions), key=lambda pair: pair[0])]
+        pass

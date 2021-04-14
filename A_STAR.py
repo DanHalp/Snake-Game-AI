@@ -26,10 +26,11 @@ class A_STAR(GameMode):
         found dead ends.
         """
         truth_table, total_dis = [], 0
-        directions = self.available_steps(snake.curr_dir)
+        directions = snake.available_steps()
         for i, d in enumerate(directions):
             dir_t = DIRECTION_TO_TUPLE[d]
             s = snake.copy()
+
             # In each direction, go DEAD_END_RADIUS steps to determine if it is blocked.
             for j in range(DEAD_END_RADIUS):
                 s.update_heuristic(dir_t)
@@ -48,6 +49,7 @@ class A_STAR(GameMode):
         The A* algorithm uses an ongoing self-sorting stack.
         For more information about how the algo works, check out: https://www.youtube.com/watch?v=ySN5Wnu88nE&t=535s.
         """
+
         scores, visited = deque([self.heu(snake, food)]), {str(snake.body[-1]): (snake, 0, moves)}
         dead_moves = []
         stack = deque([str(snake.body[-1])])
@@ -67,7 +69,7 @@ class A_STAR(GameMode):
                 sk.curr_dir = d
                 sk.update_heuristic(dir_t)
 
-                # Noes with such score is a node that is considered as a "dead end" (see self.dead_end docstring).
+                # A node with such score is a node that is considered as a "dead end" (see self.dead_end docstring).
                 # The longest path cannot be longer the board_size.
                 if c_score >= board_size:
                     return True, c_moves

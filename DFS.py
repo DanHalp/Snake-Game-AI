@@ -4,6 +4,7 @@ from GameMode import GameMode
 def set_final_moves(final_moves, t_moves):
     return t_moves if len(t_moves) >= len(final_moves) else final_moves
 
+
 class DFS(GameMode):
     """
     Solve one Snake Game with the DFS algorithm.
