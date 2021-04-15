@@ -19,6 +19,23 @@ class NNSnake(Snake):
         self.bs = [np.zeros(HIDDEN_SIZE_1),
                    np.zeros(HIDDEN_SIZE_2),
                    np.zeros(OUTPUT_SIZE)]
+
+        # Adam experiment:
+        self.adam_w_first_moment = [np.zeros(self.ws[0].shape),
+                                    np.zeros(self.ws[1].shape),
+                                    np.zeros(self.ws[2].shape)]
+        self.adam_w_second_moment = [np.zeros(self.ws[0].shape),
+                                    np.zeros(self.ws[1].shape),
+                                    np.zeros(self.ws[2].shape)]
+
+        self.adam_b_first_moment = [np.zeros(self.bs[0].shape),
+                                    np.zeros(self.bs[1].shape),
+                                    np.zeros(self.bs[2].shape)]
+        self.adam_b_second_moment = [np.zeros(self.bs[0].shape),
+                                    np.zeros(self.bs[1].shape),
+                                    np.zeros(self.bs[2].shape)]
+
+
         self.score = 0
         self.total_steps = 0
         self.death_penalty = 0
@@ -116,7 +133,7 @@ class NNSnake(Snake):
         n_layers = len(self.ws)
         for i in range(n_layers):
             current_layer = (current_layer.dot(self.ws[i]) + self.bs[i])
-            if i < n_layers - 1: current_layer = np.maximum(current_layer, 0)
+            if i < n_layers - 1: current_layer = (np.maximum(current_layer, 0))
         if save_cand == 3:
             print(current_layer)
         max_val = np.max(current_layer)
@@ -210,6 +227,7 @@ class NN(GameMode, SnakeGame):
         self.n_threads = n_threads
         self.best_candidate = self.generation[0]
         self.data = []
+        self.mutation_rate = MUTATION_THRESH
 
     @staticmethod
     def decoy():
@@ -228,6 +246,7 @@ class NN(GameMode, SnakeGame):
             pick = np.random.uniform(0, wheel_sum)
             idx = np.argmax(np.cumsum(rewards) >= pick)
             return deepcopy(curr_pop[idx])
+
 
         def get_offsprings(x: NNSnake, y: NNSnake, par_chance=0.7):
 
@@ -249,18 +268,68 @@ class NN(GameMode, SnakeGame):
         self.generation += offsp
 
     def mutate(self):
+        self.mutation_rate = max(self.decay_value(self.mutation_rate), FINAL_MUTATION_RATE)
         for s in self.generation[GEN_SIZE:]:
             for i in range(len(s.ws)):
 
                 h, w = s.ws[i].shape
-                indices = np.random.rand(h, w) < MUTATION_THRESH
+                indices = np.random.rand(h, w) < self.mutation_rate
                 gauss_values = np.random.normal(size=(h, w))
-                s.ws[i][indices] = s.ws[i][indices] + gauss_values[indices]
+                s.ws[i][indices] += + gauss_values[indices]
 
                 h = len(s.bs[i])
-                indices = np.random.rand(h) < MUTATION_THRESH
+                indices = np.random.rand(h) < self.mutation_rate
                 gauss_values = np.random.normal(size=h)
-                s.bs[i][indices] = s.bs[i][indices] + gauss_values[indices]
+                s.bs[i][indices] += + gauss_values[indices]
+
+    def mutate_adam(self, t):
+
+        def adam_tweak_w(snake, idx, d):
+            snake.adam_w_first_moment[idx] = ADAM_BETA1 * snake.adam_w_first_moment[idx] + (1 - ADAM_BETA1) * d
+            snake.adam_w_second_moment[idx] = ADAM_BETA2 * snake.adam_w_second_moment[idx] + (1 - ADAM_BETA2) * (d ** 2)
+            first_unbias = snake.adam_w_first_moment[idx] / (1 - ADAM_BETA1 ** (t + 1))
+            second_unbias = snake.adam_w_second_moment[idx] / (1 - ADAM_BETA2 ** (t + 1))
+            return FINAL_MUTATION_RATE * first_unbias / (np.sqrt(second_unbias) + 1e-7)
+
+        def adam_tweak_b(snake, idx, d):
+            snake.adam_b_first_moment[idx] = ADAM_BETA1 * snake.adam_b_first_moment[idx] + (1 - ADAM_BETA1) * d
+            snake.adam_b_second_moment[idx] = ADAM_BETA2 * snake.adam_b_second_moment[idx] + (1 - ADAM_BETA2) * (d ** 2)
+            first_unbias = snake.adam_b_first_moment[idx] / (1 - ADAM_BETA1 ** (t + 1))
+            second_unbias = snake.adam_b_second_moment[idx] / (1 - ADAM_BETA2 ** (t + 1))
+            return FINAL_MUTATION_RATE * first_unbias / (np.sqrt(second_unbias) + 1e-7)
+
+        self.mutation_rate = max(self.decay_value(self.mutation_rate), FINAL_MUTATION_RATE)
+
+        for s in self.generation[GEN_SIZE:]:
+            for i in range(len(s.ws)):
+
+                h, w = s.ws[i].shape
+                indices = np.random.rand(h, w) < self.mutation_rate
+                dx = np.random.normal(size=(h, w))
+                s.ws[i][indices] += adam_tweak_w(s, i, dx)[indices]
+
+                h = len(s.bs[i])
+                indices = np.random.rand(h) < self.mutation_rate
+                dx = np.random.normal(size=h)
+                s.bs[i][indices] += adam_tweak_b(s, i, dx)[indices]
+
+    def mutate_one(self):
+
+        self.mutation_rate = max(self.decay_value(self.mutation_rate), FINAL_MUTATION_RATE)
+        for s in self.generation[GEN_SIZE:]:
+            for i in range(len(s.ws)):
+
+                h, w = s.ws[i].shape
+                if np.random.uniform(0, 1) < self.mutation_rate:
+                    size = np.random.randint(5)
+                    numh, num_w = np.random.randint(h, size=size), np.random.randint(w, size=size)
+                    s.ws[i][numh, num_w] += np.random.normal(size=(size))
+
+                h = len(s.bs[i])
+                if np.random.uniform(0, 1) < self.mutation_rate:
+                    numh = np.random.randint(h, size=5)
+                    s.bs[i][numh] += np.random.normal(size=len(numh))
+
 
     @staticmethod
     def function_f(s):
@@ -288,6 +357,8 @@ class NN(GameMode, SnakeGame):
             # np.random.seed()
             self.mate()
             self.mutate()
+            self.mutate_adam(j)
+            # self.mutate_one()
             print(f"Iter {j}: ", end="")
             self.evaluate(pool)
 
@@ -332,13 +403,16 @@ class NN(GameMode, SnakeGame):
                 else:
                     steps += 1
                 self.pygameMUST()
-                self.clock.tick(50)
+                self.clock.tick(30)
 
                 if fails or steps > MAX_STEPS:
                     if WITH_GUI:
                         self.exit(display, score)
                         self.clock.tick(0.3)
                     break
+
+    def decay_value(self, value, factor=0.997):
+        return value * factor
 
     @staticmethod
     def get_truncated_normal(mean=0.1, sd=0.9, size=10):
