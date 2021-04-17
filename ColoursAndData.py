@@ -8,6 +8,7 @@ from collections import Counter
 from collections import deque
 from bisect import insort_left, insort_right, bisect_right
 from scipy.stats import truncnorm
+from copy import deepcopy
 
 RED = (255, 0, 0)
 GREEN = (0, 255, 0)
@@ -24,6 +25,7 @@ BORDER = 2
 W, H = 10, 10
 GAME_WIDTH = W + BORDER
 GAME_HEIGHT = H + BORDER
+MAXIMUM_SCORE = W * H - 1
 SIZE_FACTOR = 50
 BOARD_SIZE = GAME_HEIGHT * GAME_WIDTH
 SNAKE_RADIUS = SIZE_FACTOR // 2
@@ -53,17 +55,17 @@ POOL = True
 LEFT = -1
 FRONT = 0
 RIGHT = 1
-NN_NUMBER_OF_GAMES = 40
+NN_NUMBER_OF_GAMES = 75
 DIRECTIONS = [LEFT, FRONT, RIGHT]
 INPUT_SIZE = 15
-HIDDEN_SIZE_1 = 15 # 10
+HIDDEN_SIZE_1 = 20 # 10
 HIDDEN_SIZE_2 = 15 # 10
 OUTPUT_SIZE = 3
 NUM_LAYERS = 3
-save_cand = 3
-GEN_SIZE = 30
+save_cand = 2
+GEN_SIZE = 60
 MUTATION_THRESH = 0.03
-FINAL_MUTATION_RATE = 0.02
+FINAL_MUTATION_RATE = 0.03
 MAX_STEPS = BOARD_SIZE
 CROSS_VALUE = max(GAME_WIDTH, GAME_HEIGHT)
 SIGMOID = 0
@@ -75,6 +77,7 @@ NUM_TRAINING_ROUNDS = 1500
 NUMBER_OF_TRIES = 2000
 ACTIVATIONS = {RELU: lambda x: np.maximum(0, x), SIGMOID: lambda x: 1 / (1 + np.exp(-x))}
 NORMALIZE = lambda x: x / CROSS_VALUE
+MUTATION_F = lambda: np.random.choice([0.01, 0.03, 0.05, 0.5], 1, p=[0.1, 0.6, 0.2, 0.1])[0]
 
 #ADAM
 ADAM_BETA1 = 0.9

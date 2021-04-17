@@ -1,6 +1,10 @@
 import multiprocessing
 import pickle
+import time
 from copy import deepcopy
+
+import cv2
+
 from Snake import Snake
 from ColoursAndData import *
 from GameMode import GameMode
@@ -19,21 +23,6 @@ class NNSnake(Snake):
         self.bs = [np.zeros(HIDDEN_SIZE_1),
                    np.zeros(HIDDEN_SIZE_2),
                    np.zeros(OUTPUT_SIZE)]
-
-        # Adam experiment:
-        self.adam_w_first_moment = [np.zeros(self.ws[0].shape),
-                                    np.zeros(self.ws[1].shape),
-                                    np.zeros(self.ws[2].shape)]
-        self.adam_w_second_moment = [np.zeros(self.ws[0].shape),
-                                    np.zeros(self.ws[1].shape),
-                                    np.zeros(self.ws[2].shape)]
-
-        self.adam_b_first_moment = [np.zeros(self.bs[0].shape),
-                                    np.zeros(self.bs[1].shape),
-                                    np.zeros(self.bs[2].shape)]
-        self.adam_b_second_moment = [np.zeros(self.bs[0].shape),
-                                    np.zeros(self.bs[1].shape),
-                                    np.zeros(self.bs[2].shape)]
 
 
         self.score = 0
@@ -89,8 +78,9 @@ class NNSnake(Snake):
 
     def dis_to_food(self):
         posses = np.array([np.array(self.body[-1]) + np.array(DIRECTION_TO_TUPLE[d]) for d in self.available_steps()])
-        ret = np.linalg.norm(posses - np.array(self.food), axis=1)
-        return ret
+        ret = (np.linalg.norm(posses - np.array(self.food), axis=1) * (1 /CROSS_VALUE) * 10)
+        ret -= np.min(ret)
+        return ACTIVATIONS[SIGMOID](ret)
 
     def deg_to_food(self):
         food_deg = self.deg_to_objects(DIRECTION_TO_ANGLE[self.available_steps()], self.food)
@@ -108,8 +98,8 @@ class NNSnake(Snake):
         for i in range(3):
             cands = body[:-1][bins == i]
             if len(cands):
-                ret[i] = len(cands) * np.linalg.norm(body[-1] - cands) / (len(bins))
-        return NN.put_in_range(ret, 0, 1)
+                ret[i] = np.sum(1 / np.linalg.norm(body[-1] - cands + 1e-4, axis=1))
+        return ret
 
     def threats(self):
         return [self.dis_from_threat(d, self.food) for d in self.available_steps()]
@@ -117,9 +107,9 @@ class NNSnake(Snake):
     def create_input(self):
 
         walls_dis = self.dis_to_walls() / CROSS_VALUE
-        food_dis = self.dis_to_food() / CROSS_VALUE
-        food_deg = self.deg_to_food()  #/ PI
-        body_dis = self.dis_to_body()
+        food_dis = self.dis_to_food()
+        food_deg = self.deg_to_food()
+        body_dis = ACTIVATIONS[SIGMOID](self.dis_to_body())
         danger = self.threats()
 
         if save_cand == 3:
@@ -143,8 +133,7 @@ class NNSnake(Snake):
 
     def reward(self):
         s, a = self.total_steps, self.score
-        self.rew = s + ((2 ** a) + 500 * (a ** 2.3)) - (0.25 * (s ** 1.3) * (a ** 1.2))
-        # self.rew = a + s - self.death_penalty
+        self.rew = s + ((2 ** a) + 500 * (a ** 2.3 - self.death_penalty ** 1.4)) - (0.25 * (s ** 1.3) * (a ** 1.2))
         return self.rew
 
     def update(self, d):
@@ -165,7 +154,7 @@ class NNSnake(Snake):
         self.body[-1] = new_head
 
         if self.bites_itself(new_head):
-            self.death_penalty = -4
+            self.death_penalty = 4
             return False, True
 
         elif self.hits_wall(*new_head):
@@ -190,9 +179,9 @@ class NNSnake(Snake):
         while True:
 
             if steps >= MAX_STEPS:
-                self.death_penalty = -2
+                self.death_penalty = 2
                 break
-            elif failed:
+            elif failed or score == MAXIMUM_SCORE:
                 break
 
             move = self.forward()
@@ -208,7 +197,7 @@ class NNSnake(Snake):
             # if WITH_GUI & (save_cand == 3):
             #     NN.fill_display(display, self, self.food, score)
         self.score = score
-        return self
+        return score, self.total_steps, self.death_penalty
 
     def copy(self):
         s = NNSnake(self.food)
@@ -247,7 +236,6 @@ class NN(GameMode, SnakeGame):
             idx = np.argmax(np.cumsum(rewards) >= pick)
             return deepcopy(curr_pop[idx])
 
-
         def get_offsprings(x: NNSnake, y: NNSnake, par_chance=0.7):
 
             for i in range(len(x.ws)):
@@ -268,67 +256,19 @@ class NN(GameMode, SnakeGame):
         self.generation += offsp
 
     def mutate(self):
-        self.mutation_rate = max(self.decay_value(self.mutation_rate), FINAL_MUTATION_RATE)
         for s in self.generation[GEN_SIZE:]:
             for i in range(len(s.ws)):
 
                 h, w = s.ws[i].shape
-                indices = np.random.rand(h, w) < self.mutation_rate
+                indices = np.random.rand(h, w) < MUTATION_F()
                 gauss_values = np.random.normal(size=(h, w))
-                s.ws[i][indices] += + gauss_values[indices]
+                s.ws[i][indices] += gauss_values[indices]
 
                 h = len(s.bs[i])
-                indices = np.random.rand(h) < self.mutation_rate
+                indices = np.random.rand(h) < MUTATION_F()
                 gauss_values = np.random.normal(size=h)
-                s.bs[i][indices] += + gauss_values[indices]
+                s.bs[i][indices] += gauss_values[indices]
 
-    def mutate_adam(self, t):
-
-        def adam_tweak_w(snake, idx, d):
-            snake.adam_w_first_moment[idx] = ADAM_BETA1 * snake.adam_w_first_moment[idx] + (1 - ADAM_BETA1) * d
-            snake.adam_w_second_moment[idx] = ADAM_BETA2 * snake.adam_w_second_moment[idx] + (1 - ADAM_BETA2) * (d ** 2)
-            first_unbias = snake.adam_w_first_moment[idx] / (1 - ADAM_BETA1 ** (t + 1))
-            second_unbias = snake.adam_w_second_moment[idx] / (1 - ADAM_BETA2 ** (t + 1))
-            return FINAL_MUTATION_RATE * first_unbias / (np.sqrt(second_unbias) + 1e-7)
-
-        def adam_tweak_b(snake, idx, d):
-            snake.adam_b_first_moment[idx] = ADAM_BETA1 * snake.adam_b_first_moment[idx] + (1 - ADAM_BETA1) * d
-            snake.adam_b_second_moment[idx] = ADAM_BETA2 * snake.adam_b_second_moment[idx] + (1 - ADAM_BETA2) * (d ** 2)
-            first_unbias = snake.adam_b_first_moment[idx] / (1 - ADAM_BETA1 ** (t + 1))
-            second_unbias = snake.adam_b_second_moment[idx] / (1 - ADAM_BETA2 ** (t + 1))
-            return FINAL_MUTATION_RATE * first_unbias / (np.sqrt(second_unbias) + 1e-7)
-
-        self.mutation_rate = max(self.decay_value(self.mutation_rate), FINAL_MUTATION_RATE)
-
-        for s in self.generation[GEN_SIZE:]:
-            for i in range(len(s.ws)):
-
-                h, w = s.ws[i].shape
-                indices = np.random.rand(h, w) < self.mutation_rate
-                dx = np.random.normal(size=(h, w))
-                s.ws[i][indices] += adam_tweak_w(s, i, dx)[indices]
-
-                h = len(s.bs[i])
-                indices = np.random.rand(h) < self.mutation_rate
-                dx = np.random.normal(size=h)
-                s.bs[i][indices] += adam_tweak_b(s, i, dx)[indices]
-
-    def mutate_one(self):
-
-        self.mutation_rate = max(self.decay_value(self.mutation_rate), FINAL_MUTATION_RATE)
-        for s in self.generation[GEN_SIZE:]:
-            for i in range(len(s.ws)):
-
-                h, w = s.ws[i].shape
-                if np.random.uniform(0, 1) < self.mutation_rate:
-                    size = np.random.randint(5)
-                    numh, num_w = np.random.randint(h, size=size), np.random.randint(w, size=size)
-                    s.ws[i][numh, num_w] += np.random.normal(size=(size))
-
-                h = len(s.bs[i])
-                if np.random.uniform(0, 1) < self.mutation_rate:
-                    numh = np.random.randint(h, size=5)
-                    s.bs[i][numh] += np.random.normal(size=len(numh))
 
 
     @staticmethod
@@ -338,9 +278,14 @@ class NN(GameMode, SnakeGame):
     def evaluate(self, pool=None):
         [s.set_body_and_food() for s in self.generation]
         if POOL:
-            self.generation = pool.map(NN.function_f, self.generation)
+            scores = pool.map(NN.function_f, self.generation)
         else:
-            self.generation = [s.run() for s in self.generation]
+            scores = [s.run() for s in self.generation]
+
+        for i, (score, steps, penalty) in enumerate(scores):
+            self.generation[i].score = score
+            self.generation[i].total_steps = steps
+            self.generation[i].death_penalty = penalty
 
         self.generation.sort(reverse=True, key=lambda a: a.reward())
         self.generation = self.generation[:GEN_SIZE]
@@ -354,11 +299,10 @@ class NN(GameMode, SnakeGame):
         self.best_candidate.rew = 0
         best_score, turns = 0, 0
         for j in range(number_of_rounds):
-            # np.random.seed()
+            start = time.time()
             self.mate()
             self.mutate()
-            self.mutate_adam(j)
-            # self.mutate_one()
+
             print(f"Iter {j}: ", end="")
             self.evaluate(pool)
 
@@ -367,11 +311,11 @@ class NN(GameMode, SnakeGame):
                 best_score = self.best_candidate.score
                 turns = 0
 
-            if int(j * 0.1) == j * 0.1:
                 with open("best.pickle", "wb") as file:
                     pickle.dump(self.best_candidate, file)
+
             turns += 1
-            print(" ", best_score, turns)
+            print(" ", best_score, turns, time.time() - start)
 
         with open("best.pickle", "wb") as file:
             pickle.dump(self.best_candidate, file)
@@ -390,6 +334,7 @@ class NN(GameMode, SnakeGame):
                 self.fill_display(display, curr_snake, curr_snake.food, score)
 
             while True:
+                temp = deepcopy(curr_snake)
                 move = curr_snake.forward()
                 curr_snake.curr_dir = move
                 d = DIRECTION_TO_TUPLE[move]
@@ -403,10 +348,11 @@ class NN(GameMode, SnakeGame):
                 else:
                     steps += 1
                 self.pygameMUST()
-                self.clock.tick(30)
+                self.clock.tick(70)
 
                 if fails or steps > MAX_STEPS:
                     if WITH_GUI:
+                        temp.create_input()
                         self.exit(display, score)
                         self.clock.tick(0.3)
                     break
@@ -438,16 +384,6 @@ class NN(GameMode, SnakeGame):
 def save_files(im="res"):
     from scipy.signal import savgol_filter
 
-    f_counter = 0
-
-    files = glob.glob("./**/*.jpg")
-    if len(files):
-        for f in files:
-            x = max([int(n) for n in re.findall(r"\d+", f)])
-            if x > f_counter:
-                f_counter = x
-
-    f_counter += 1
     data = np.array(nn.data)
     titles = ["best_cand_score", "gen_avg"]
     for i in range(data.shape[1]):
@@ -486,7 +422,7 @@ if __name__ == '__main__':
         save_files()
 
     elif save_cand == 2:
-        with open("NNsnakeResults/best3.pickle", "rb") as file:
+        with open("best.pickle", "rb") as file:
             nn.best_candidate = pickle.load(file)
             # nn.play_with_winner(number_of_games=100)
             nn.generation = [deepcopy(nn.best_candidate) for _ in range(GEN_SIZE)]

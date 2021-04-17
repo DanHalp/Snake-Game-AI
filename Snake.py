@@ -76,13 +76,17 @@ class Snake:
         self.body.rotate(-1)
         self.body[-1] = new_head
 
+    def update(self, d):
+        pass
+
     def hits_wall(self, x, y):
-        return x <= 0 or x >= GAME_WIDTH or y <= 0 or y >= GAME_HEIGHT
+        return x <= 0 or x >= GAME_WIDTH - 1 or y <= 0 or y >= GAME_HEIGHT - 1
 
     def bites_itself(self, new_head):
         return self.body_set[tuple(new_head)] > 1
 
-    def fails(self, new_head):
+    def fails(self, new_head=None):
+        new_head = new_head if new_head else self.body[-1]
         return self.hits_wall(*new_head) or self.bites_itself(new_head)
 
     def euclidean_dis(self, elememt):
@@ -92,10 +96,10 @@ class Snake:
 
     def dis_from_threat(self, direction, food):
 
-        dummy = self.copy()
+        dummy = deepcopy(self)
         c_dir = DIRECTION_TO_TUPLE[direction]
-        new_head = np.array(dummy.body[-1]) + c_dir
-        return 0 if self.fails(new_head) else 1
+        dummy.update_heuristic(c_dir)
+        return 0 if dummy.fails() else 1
 
     def find_directions(self):
         # directions = snake.available_steps()
