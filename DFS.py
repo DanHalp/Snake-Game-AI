@@ -42,7 +42,7 @@ class DFS(GameMode):
                         final_moves = set_final_moves(final_moves, t_moves)
                         continue
 
-                    elif t_snake.has_eaten(food):
+                    elif t_snake.has_eaten(food, t_snake.body[-1]):
                         return True, t_moves
 
                     stack.append(t_head)

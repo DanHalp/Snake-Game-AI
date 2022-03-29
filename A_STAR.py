@@ -76,7 +76,7 @@ class A_STAR(GameMode):
                 # Do not add nodes that kill the snake to the stacks.
                 if sk.fails():
                     continue
-                elif sk.has_eaten(food):
+                elif sk.has_eaten(food, sk.body[-1]):
                     # Before declaring victory - would the snake have a high probability to die after eating the apple?
                     # If so, do not use this path just yet, and try to look for a better one.
                     isDeadEnd, dis_from_body = self.dead_end(sk)

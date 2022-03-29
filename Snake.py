@@ -107,3 +107,9 @@ class Snake:
         # distances = self.dis_to_food(coor, food)
         # return [x for _, x in sorted(zip(distances, directions), key=lambda pair: pair[0])]
         pass
+
+    def surroundings_pixels(self, mode=0):
+        ret = np.array(self.body[-1]) + DIRECTION_TO_TUPLE[self.available_steps()]
+        if mode:
+            ret = [tuple(x) for x in ret]
+        return ret

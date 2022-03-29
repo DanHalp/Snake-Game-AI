@@ -1,5 +1,6 @@
 import pygame
 import A_STAR
+import BFS
 import Snake
 import DFS
 # import BFS
@@ -15,7 +16,7 @@ class SnakeGame:
 
     @staticmethod
     def init_display():
-        dis = pygame.display.set_mode((GAME_WIDTH * SIZE_FACTOR, GAME_HEIGHT * SIZE_FACTOR))
+        dis = pygame.display.set_mode(((GAME_WIDTH - 1) * SIZE_FACTOR, (GAME_HEIGHT - 1) * SIZE_FACTOR))
         dis.fill(WHITE)
         pygame.display.update()
         return dis
@@ -55,9 +56,9 @@ class SnakeGame:
          For debugging purposes, one can set the starting position of the game.
         """
         s = Snake.Snake()
-        s.body[0] = (2, 2)
+        s.body[0] = (5, 2)
         s.body_set = Counter(s.body)
-        s.curr_dir = 0
+        s.curr_dir = 2
         food = (1, 3)
         return s, food, 1
 
@@ -157,7 +158,7 @@ class SnakeGame:
             self.tree_call()
 
         elif game_mode == BFS_MODE:
-            self.BFS()
+            self.dfs_bfs_game(game_mode=BFS_MODE)
 
         elif game_mode == DFS_MODE:
             self.dfs_bfs_game(game_mode=DFS_MODE)
@@ -171,6 +172,8 @@ class SnakeGame:
             return DFS.DFS()
         elif game_mode == A_STAR_MODE:
             return A_STAR.A_STAR()
+        elif game_mode == BFS_MODE:
+            return BFS.BFS()
         raise Exception("Attention: Only DFS and A-STAR modes are available currently.")
 
     def a_star_game(self, game_mode=A_STAR_MODE, number_of_games=10):
@@ -196,7 +199,7 @@ class SnakeGame:
                         self.fill_display(display, curr_snake, curr_food, score)
 
                     self.pygameMUST()
-                    self.clock.tick(150)
+                    self.clock.tick(20)
 
                 if not success or not len(moves):
 
@@ -219,14 +222,14 @@ class SnakeGame:
 
             while True:
                 s = curr_snake.copy()
-                success, moves = mode_obj.find_route(s, curr_food, [])
+                success, moves = mode_obj.find_route(s, curr_food, [], display if SHOW_POLICY else None)
                 for i, move in enumerate(moves):
                     d = DIRECTION_TO_TUPLE[move]
                     b, curr_food = self.update_board(curr_snake, curr_food, d)
                     if WITH_GUI:
                         self.fill_display(display, curr_snake, curr_food, score)
                     self.pygameMUST()
-                    self.clock.tick(150)
+                    self.clock.tick(30)
 
                 if not success or not len(moves):
                     if WITH_GUI:
@@ -240,9 +243,9 @@ class SnakeGame:
 def main():
     pygame.init()
     game = SnakeGame()
-    game.run_game(game_mode=A_STAR_MODE)
+    game.run_game(game_mode=BFS_MODE)
     pygame.quit()
 
 #
-# if __name__ == '__main__':
-#     main()
+if __name__ == '__main__':
+    main()

@@ -12,7 +12,8 @@ class GameMode:
         directions = snake.available_steps()
         coor = np.array([np.array(snake.body[-1]) + np.array(DIRECTION_TO_TUPLE[i]) for i in directions])
         distances = self.dis_to_food(coor, food)
-        return [x for _, x in sorted(zip(distances, directions), key=lambda pair: pair[0])]
+        # return [x for _, x in sorted(zip(distances, directions), key=lambda pair: pair[0])]
+        return directions
 
     @staticmethod
     def printBlackTrial(c_snake, display):
